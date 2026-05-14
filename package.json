@@ -1,0 +1,13 @@
+{
+  "name": "copilot-otel-langfuse-devcontainer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "otel:setup": "node scripts/setup-copilot-otel.mjs",
+    "otel:compose": "node scripts/run-copilot-otel-compose.mjs",
+    "otel:start-session": "node scripts/start-copilot-otel-session.mjs",
+    "otel:verify": "node scripts/verify-copilot-otel.mjs",
+    "otel:report": "node scripts/capture-copilot-otel-session.mjs"
+  }
+}
