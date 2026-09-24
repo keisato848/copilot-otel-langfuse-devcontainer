@@ -46,12 +46,18 @@ async function isHealthy(host) {
 }
 
 async function resolveHealthyHost() {
-  for (const host of healthHosts) {
-    if (await isHealthy(host)) {
-      return host;
-    }
+  try {
+    return await Promise.any(
+      healthHosts.map(async host => {
+        if (await isHealthy(host)) {
+          return host;
+        }
+        throw new Error('Host is not healthy');
+      })
+    );
+  } catch {
+    return '';
   }
-  return '';
 }
 
 async function captureScreenshot(host, env) {
