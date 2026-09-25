@@ -46,12 +46,18 @@ async function isHealthy(host) {
 }
 
 async function resolveHealthyHost() {
-  for (const host of healthHosts) {
-    if (await isHealthy(host)) {
-      return host;
-    }
+  // Optimize: Check all health hosts concurrently using Promise.any instead of sequentially
+  // Expected Impact: Reduces maximum timeout delay from O(N) to O(1)
+  try {
+    return await Promise.any(
+      healthHosts.map(async host => {
+        if (await isHealthy(host)) return host;
+        throw new Error('Unhealthy');
+      })
+    );
+  } catch {
+    return '';
   }
-  return '';
 }
 
 async function captureScreenshot(host, env) {
