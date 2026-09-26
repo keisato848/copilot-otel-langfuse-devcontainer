@@ -53,13 +53,18 @@ function openDashboard() {
 }
 
 console.log('[otel-session] Langfuse 起動を確認します。');
+// ⚡ Bolt: Check hosts concurrently to reduce total polling time
 let readyHost = '';
 for (let attempt = 0; attempt < maxAttempts && !readyHost; attempt += 1) {
-  for (const host of healthHosts) {
-    if (await isHealthy(host)) {
-      readyHost = host;
-      break;
-    }
+  try {
+    readyHost = await Promise.any(
+      healthHosts.map(async (host) => {
+        if (await isHealthy(host)) return host;
+        throw new Error('Unhealthy');
+      })
+    );
+  } catch {
+    // All hosts failed
   }
   if (!readyHost) {
     await sleep(intervalMs);

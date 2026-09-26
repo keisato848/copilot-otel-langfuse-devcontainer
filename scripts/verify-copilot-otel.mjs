@@ -43,13 +43,18 @@ function sleep(ms) {
 
 console.log('[verify] Langfuse の起動を確認します（最大約5分）。');
 
+// ⚡ Bolt: Check hosts concurrently to reduce total polling time
 let readyHost = '';
 for (let attempt = 0; attempt < maxAttempts && !readyHost; attempt += 1) {
-  for (const host of hosts) {
-    if (await isHealthy(host)) {
-      readyHost = host;
-      break;
-    }
+  try {
+    readyHost = await Promise.any(
+      hosts.map(async (host) => {
+        if (await isHealthy(host)) return host;
+        throw new Error('Unhealthy');
+      })
+    );
+  } catch {
+    // All hosts failed
   }
 
   if (!readyHost) {
@@ -65,12 +70,17 @@ if (readyHost) {
   console.warn('[verify] ログ確認例: npm run otel:compose -- logs langfuse-web');
 }
 
+// ⚡ Bolt: Check collector hosts concurrently
 let readyCollector = '';
-for (const host of collectorHosts) {
-  if (await isReachable(host)) {
-    readyCollector = host;
-    break;
-  }
+try {
+  readyCollector = await Promise.any(
+    collectorHosts.map(async (host) => {
+      if (await isReachable(host)) return host;
+      throw new Error('Unreachable');
+    })
+  );
+} catch {
+  // All hosts failed
 }
 
 if (readyCollector) {
