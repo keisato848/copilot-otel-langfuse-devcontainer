@@ -1,0 +1,3 @@
+## 2026-09-26 - Concurrent Fallback Checks With Promise.any
+**Learning:** Sequential network checks involving unreachable hosts compound timeout delays (e.g., checking `hostA` (times out in 3s) then `hostB` (returns immediately) takes 3s). This is especially problematic in Docker/DevContainer environments where some `localhost` vs `container-name` references fail by design.
+**Action:** When searching for the first available host from a list, always use `Promise.any()` mapped over health checks to parallelize the requests. This reduces the wait time to exactly the latency of the fastest healthy host, completely avoiding compounding timeouts from unreachable endpoints.
