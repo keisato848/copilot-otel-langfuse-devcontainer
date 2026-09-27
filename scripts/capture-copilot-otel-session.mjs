@@ -45,13 +45,22 @@ async function isHealthy(host) {
   }
 }
 
+// ⚡ Bolt: Use Promise.any to check health hosts concurrently for faster resolution
+// Expected impact: Speeds up health checks significantly when the first host is unreachable
+// but a subsequent host is healthy, avoiding sequential timeout delays.
 async function resolveHealthyHost() {
-  for (const host of healthHosts) {
-    if (await isHealthy(host)) {
-      return host;
-    }
+  try {
+    return await Promise.any(
+      healthHosts.map(async host => {
+        if (await isHealthy(host)) {
+          return host;
+        }
+        throw new Error('Not healthy');
+      })
+    );
+  } catch {
+    return '';
   }
-  return '';
 }
 
 async function captureScreenshot(host, env) {
