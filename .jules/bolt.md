@@ -1,0 +1,3 @@
+## 2024-05-14 - Unreachable internal docker hosts cause sequential bottleneck
+**Learning:** Checking local vs internal docker hostnames (e.g. `http://langfuse-web:3000` vs `http://localhost:3000`) sequentially from the host network can cause massive performance issues. If the first internal host fails to resolve/respond and relies on a 3000ms timeout to abort, the entire loop takes over 3000ms before it even tries the valid local hostname.
+**Action:** Use `Promise.any()` when resolving endpoints from an array of potential hostnames (where some are internal docker/devcontainer hostnames and some are local hostnames). This prevents slow/unreachable hostnames from blocking the successful resolution of a valid one.
