@@ -53,13 +53,19 @@ function openDashboard() {
 }
 
 console.log('[otel-session] Langfuse 起動を確認します。');
+// ⚡ Bolt: Optimize sequential health checks to be concurrent using Promise.any
+// This prevents slow/unreachable internal hostnames from blocking subsequent checks
 let readyHost = '';
 for (let attempt = 0; attempt < maxAttempts && !readyHost; attempt += 1) {
-  for (const host of healthHosts) {
-    if (await isHealthy(host)) {
-      readyHost = host;
-      break;
-    }
+  try {
+    readyHost = await Promise.any(
+      healthHosts.map(async (host) => {
+        if (await isHealthy(host)) return host;
+        throw new Error('Unhealthy');
+      })
+    );
+  } catch {
+    readyHost = '';
   }
   if (!readyHost) {
     await sleep(intervalMs);

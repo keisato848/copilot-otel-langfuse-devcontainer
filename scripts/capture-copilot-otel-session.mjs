@@ -45,13 +45,19 @@ async function isHealthy(host) {
   }
 }
 
+// ⚡ Bolt: Optimize sequential health checks to be concurrent using Promise.any
+// This prevents slow/unreachable internal hostnames from blocking subsequent checks
 async function resolveHealthyHost() {
-  for (const host of healthHosts) {
-    if (await isHealthy(host)) {
-      return host;
-    }
+  try {
+    return await Promise.any(
+      healthHosts.map(async (host) => {
+        if (await isHealthy(host)) return host;
+        throw new Error('Unhealthy');
+      })
+    );
+  } catch {
+    return '';
   }
-  return '';
 }
 
 async function captureScreenshot(host, env) {
