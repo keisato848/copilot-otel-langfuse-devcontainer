@@ -14,16 +14,28 @@ function sleep(ms) {
   return new Promise(resolveSleep => setTimeout(resolveSleep, ms));
 }
 
-async function isHealthy(host) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 3000);
+// ⚡ Bolt: Use Promise.any to check all hosts concurrently.
+// This prevents unreachable hosts (like docker hostnames outside dev container)
+// from blocking the start script with timeouts (saving up to 3 seconds per attempt).
+async function findFirstHealthyHost(hosts) {
+  const globalController = new AbortController();
   try {
-    const response = await fetch(`${host}/api/public/health`, { signal: controller.signal });
-    return response.ok;
+    const readyHost = await Promise.any(
+      hosts.map(async host => {
+        const timeout = setTimeout(() => globalController.abort(), 3000);
+        try {
+          const response = await fetch(`${host}/api/public/health`, { signal: globalController.signal });
+          if (response.ok) return host;
+          throw new Error('Not healthy');
+        } finally {
+          clearTimeout(timeout);
+        }
+      })
+    );
+    globalController.abort(); // Cancel pending requests as soon as one succeeds
+    return readyHost;
   } catch {
-    return false;
-  } finally {
-    clearTimeout(timeout);
+    return '';
   }
 }
 
@@ -55,12 +67,7 @@ function openDashboard() {
 console.log('[otel-session] Langfuse 起動を確認します。');
 let readyHost = '';
 for (let attempt = 0; attempt < maxAttempts && !readyHost; attempt += 1) {
-  for (const host of healthHosts) {
-    if (await isHealthy(host)) {
-      readyHost = host;
-      break;
-    }
-  }
+  readyHost = await findFirstHealthyHost(healthHosts);
   if (!readyHost) {
     await sleep(intervalMs);
   }

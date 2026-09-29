@@ -1,0 +1,3 @@
+## 2024-05-19 - Concurrent Fetch in Node.js with Promise.any
+**Learning:** When using `Promise.any()` to make concurrent requests to check host availability, simply returning the first successful promise isn't enough to speed up the Node.js exit time. If slower requests timeout (e.g., waiting 3 seconds for an unreachable host), Node.js will wait for all those active timers and pending asynchronous I/O to finish before the script exits, negating the expected performance gain at the script execution level.
+**Action:** Always use a shared `AbortController` (or an array of controllers) to explicitly cancel the slower pending requests (`controller.abort()`) as soon as `Promise.any()` resolves the first success.
