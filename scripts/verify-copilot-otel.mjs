@@ -4,29 +4,49 @@ const collectorHosts = ['http://otel-collector:4318', 'http://localhost:4318'];
 const maxAttempts = 60;
 const intervalMs = 5000;
 
-async function isHealthy(host) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 3000);
+// ⚡ Bolt: Use Promise.any to check all hosts concurrently.
+// This prevents unreachable hosts from sequentially blocking checks
+// and significantly speeds up the verification process.
+async function findFirstHealthyHost(hosts) {
+  const globalController = new AbortController();
   try {
-    const response = await fetch(`${host}/api/public/health`, { signal: controller.signal });
-    return response.ok;
+    const readyHost = await Promise.any(
+      hosts.map(async host => {
+        const timeout = setTimeout(() => globalController.abort(), 3000);
+        try {
+          const response = await fetch(`${host}/api/public/health`, { signal: globalController.signal });
+          if (response.ok) return host;
+          throw new Error("Not healthy");
+        } finally {
+          clearTimeout(timeout);
+        }
+      })
+    );
+    globalController.abort(); // Cancel pending requests as soon as one succeeds
+    return readyHost;
   } catch {
-    return false;
-  } finally {
-    clearTimeout(timeout);
+    return "";
   }
 }
 
-async function isReachable(host) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 3000);
+async function findFirstReachableHost(hosts) {
+  const globalController = new AbortController();
   try {
-    await fetch(host, { signal: controller.signal });
-    return true;
+    const readyHost = await Promise.any(
+      hosts.map(async host => {
+        const timeout = setTimeout(() => globalController.abort(), 3000);
+        try {
+          await fetch(host, { signal: globalController.signal });
+          return host;
+        } finally {
+          clearTimeout(timeout);
+        }
+      })
+    );
+    globalController.abort(); // Cancel pending requests as soon as one succeeds
+    return readyHost;
   } catch {
-    return false;
-  } finally {
-    clearTimeout(timeout);
+    return "";
   }
 }
 
@@ -45,12 +65,7 @@ console.log('[verify] Langfuse の起動を確認します（最大約5分）。
 
 let readyHost = '';
 for (let attempt = 0; attempt < maxAttempts && !readyHost; attempt += 1) {
-  for (const host of hosts) {
-    if (await isHealthy(host)) {
-      readyHost = host;
-      break;
-    }
-  }
+  readyHost = await findFirstHealthyHost(hosts);
 
   if (!readyHost) {
     await sleep(intervalMs);
@@ -65,13 +80,7 @@ if (readyHost) {
   console.warn('[verify] ログ確認例: npm run otel:compose -- logs langfuse-web');
 }
 
-let readyCollector = '';
-for (const host of collectorHosts) {
-  if (await isReachable(host)) {
-    readyCollector = host;
-    break;
-  }
-}
+let readyCollector = await findFirstReachableHost(collectorHosts);
 
 if (readyCollector) {
   console.log(`[verify] OTel Collector は到達可能です: ${readyCollector}`);
