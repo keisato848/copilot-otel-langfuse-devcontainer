@@ -46,12 +46,17 @@ async function isHealthy(host) {
 }
 
 async function resolveHealthyHost() {
-  for (const host of healthHosts) {
-    if (await isHealthy(host)) {
-      return host;
-    }
+  try {
+    // ⚡ Bolt: check fallback hosts in parallel to avoid 3s block on unreachable primary host
+    return await Promise.any(
+      healthHosts.map(async (host) => {
+        if (await isHealthy(host)) return host;
+        throw new Error('Unhealthy');
+      })
+    );
+  } catch {
+    return '';
   }
-  return '';
 }
 
 async function captureScreenshot(host, env) {
