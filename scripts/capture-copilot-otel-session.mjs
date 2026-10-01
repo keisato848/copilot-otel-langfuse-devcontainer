@@ -46,12 +46,19 @@ async function isHealthy(host) {
 }
 
 async function resolveHealthyHost() {
-  for (const host of healthHosts) {
-    if (await isHealthy(host)) {
-      return host;
-    }
+  // Use Promise.any to check URLs in parallel.
+  // This prevents sequential timeout delays caused by unresolvable Docker hostnames.
+  try {
+    return await Promise.any(
+      healthHosts.map(async host => {
+        const ok = await isHealthy(host);
+        if (ok) return host;
+        throw new Error('Not healthy');
+      })
+    );
+  } catch {
+    return '';
   }
-  return '';
 }
 
 async function captureScreenshot(host, env) {

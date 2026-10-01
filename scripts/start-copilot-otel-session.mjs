@@ -55,12 +55,20 @@ function openDashboard() {
 console.log('[otel-session] Langfuse 起動を確認します。');
 let readyHost = '';
 for (let attempt = 0; attempt < maxAttempts && !readyHost; attempt += 1) {
-  for (const host of healthHosts) {
-    if (await isHealthy(host)) {
-      readyHost = host;
-      break;
-    }
+  // Use Promise.any to check URLs in parallel.
+  // This prevents sequential timeout delays caused by unresolvable Docker hostnames.
+  try {
+    readyHost = await Promise.any(
+      healthHosts.map(async host => {
+        const ok = await isHealthy(host);
+        if (ok) return host;
+        throw new Error('Not healthy');
+      })
+    );
+  } catch {
+    readyHost = '';
   }
+
   if (!readyHost) {
     await sleep(intervalMs);
   }

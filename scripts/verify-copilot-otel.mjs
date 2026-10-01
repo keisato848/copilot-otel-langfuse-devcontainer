@@ -45,11 +45,18 @@ console.log('[verify] Langfuse の起動を確認します（最大約5分）。
 
 let readyHost = '';
 for (let attempt = 0; attempt < maxAttempts && !readyHost; attempt += 1) {
-  for (const host of hosts) {
-    if (await isHealthy(host)) {
-      readyHost = host;
-      break;
-    }
+  // Use Promise.any to check URLs in parallel.
+  // This prevents sequential timeout delays caused by unresolvable Docker hostnames.
+  try {
+    readyHost = await Promise.any(
+      hosts.map(async host => {
+        const ok = await isHealthy(host);
+        if (ok) return host;
+        throw new Error("Not healthy");
+      })
+    );
+  } catch {
+    readyHost = "";
   }
 
   if (!readyHost) {
@@ -66,11 +73,17 @@ if (readyHost) {
 }
 
 let readyCollector = '';
-for (const host of collectorHosts) {
-  if (await isReachable(host)) {
-    readyCollector = host;
-    break;
-  }
+// Use Promise.any for the same reason as above to check collector hosts in parallel.
+try {
+  readyCollector = await Promise.any(
+    collectorHosts.map(async host => {
+      const ok = await isReachable(host);
+      if (ok) return host;
+      throw new Error("Not reachable");
+    })
+  );
+} catch {
+  readyCollector = "";
 }
 
 if (readyCollector) {
