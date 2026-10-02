@@ -46,12 +46,19 @@ async function isHealthy(host) {
 }
 
 async function resolveHealthyHost() {
-  for (const host of healthHosts) {
-    if (await isHealthy(host)) {
-      return host;
-    }
+  try {
+    // ⚡ Bolt Performance Optimization:
+    // Use Promise.any to check URLs in parallel. This prevents sequential timeout delays
+    // caused by unresolvable hostnames when running scripts outside the container network.
+    return await Promise.any(
+      healthHosts.map(async (host) => {
+        if (await isHealthy(host)) return host;
+        throw new Error('Not healthy');
+      })
+    );
+  } catch {
+    return '';
   }
-  return '';
 }
 
 async function captureScreenshot(host, env) {
