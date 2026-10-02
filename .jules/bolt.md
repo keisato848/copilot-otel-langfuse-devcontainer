@@ -1,0 +1,3 @@
+## 2024-05-18 - [Parallelize health checks for docker hostnames]
+**Learning:** Sequential network checks involving unresolvable Docker hostnames (like `langfuse-web` when run from outside the container network) introduce arbitrary, compounding timeout delays (e.g. 3s per failed hostname).
+**Action:** When attempting to resolve multiple potential hostnames in this architecture (where scripts can be run both inside and outside the container network), use `Promise.any` to test endpoints in parallel rather than a sequential `for` loop. This avoids being blocked by the timeout of unresolvable hosts when a fallback host is available.
