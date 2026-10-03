@@ -45,13 +45,20 @@ async function isHealthy(host) {
   }
 }
 
+// ⚡ Bolt Optimization: Use Promise.any to check health hosts in parallel.
+// This prevents sequential timeout delays (up to 3s per host) when unreachable hosts
+// (like Docker internal hostnames) are checked before localhost outside the container network.
 async function resolveHealthyHost() {
-  for (const host of healthHosts) {
-    if (await isHealthy(host)) {
-      return host;
-    }
+  try {
+    return await Promise.any(
+      healthHosts.map(async (host) => {
+        if (await isHealthy(host)) return host;
+        throw new Error('Unhealthy');
+      })
+    );
+  } catch {
+    return '';
   }
-  return '';
 }
 
 async function captureScreenshot(host, env) {
