@@ -45,12 +45,15 @@ console.log('[verify] Langfuse の起動を確認します（最大約5分）。
 
 let readyHost = '';
 for (let attempt = 0; attempt < maxAttempts && !readyHost; attempt += 1) {
-  for (const host of hosts) {
-    if (await isHealthy(host)) {
-      readyHost = host;
-      break;
-    }
-  }
+  // ⚡ Bolt: Parallelize health checks with Promise.any to prevent sequential timeout delays
+  readyHost = await Promise.any(
+    hosts.map(async (host) => {
+      if (await isHealthy(host)) {
+        return host;
+      }
+      throw new Error(`Unreachable: ${host}`);
+    })
+  ).catch(() => '');
 
   if (!readyHost) {
     await sleep(intervalMs);
@@ -65,13 +68,15 @@ if (readyHost) {
   console.warn('[verify] ログ確認例: npm run otel:compose -- logs langfuse-web');
 }
 
-let readyCollector = '';
-for (const host of collectorHosts) {
-  if (await isReachable(host)) {
-    readyCollector = host;
-    break;
-  }
-}
+// ⚡ Bolt: Parallelize health checks with Promise.any to prevent sequential timeout delays
+const readyCollector = await Promise.any(
+  collectorHosts.map(async (host) => {
+    if (await isReachable(host)) {
+      return host;
+    }
+    throw new Error(`Unreachable: ${host}`);
+  })
+).catch(() => '');
 
 if (readyCollector) {
   console.log(`[verify] OTel Collector は到達可能です: ${readyCollector}`);
