@@ -4,27 +4,28 @@ const collectorHosts = ['http://otel-collector:4318', 'http://localhost:4318'];
 const maxAttempts = 60;
 const intervalMs = 5000;
 
-async function isHealthy(host) {
+async function checkHealth(host) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 3000);
   try {
     const response = await fetch(`${host}/api/public/health`, { signal: controller.signal });
-    return response.ok;
+    if (response.ok) return host;
+    throw new Error('Not healthy');
   } catch {
-    return false;
+    throw new Error('Not healthy');
   } finally {
     clearTimeout(timeout);
   }
 }
 
-async function isReachable(host) {
+async function checkReachable(host) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 3000);
   try {
     await fetch(host, { signal: controller.signal });
-    return true;
+    return host;
   } catch {
-    return false;
+    throw new Error('Not reachable');
   } finally {
     clearTimeout(timeout);
   }
@@ -43,13 +44,16 @@ function sleep(ms) {
 
 console.log('[verify] Langfuse の起動を確認します（最大約5分）。');
 
+// ⚡ Bolt: Performance optimization
+// Using Promise.any() to check fallback URLs in parallel rather than sequentially.
+// When running outside the Docker network, unresolvable docker hostnames cause
+// a full timeout delay (e.g. 3s). Checking them in parallel prevents this sequential wait penalty.
 let readyHost = '';
 for (let attempt = 0; attempt < maxAttempts && !readyHost; attempt += 1) {
-  for (const host of hosts) {
-    if (await isHealthy(host)) {
-      readyHost = host;
-      break;
-    }
+  try {
+    readyHost = await Promise.any(hosts.map(checkHealth));
+  } catch (error) {
+    // All promises rejected
   }
 
   if (!readyHost) {
@@ -65,12 +69,12 @@ if (readyHost) {
   console.warn('[verify] ログ確認例: npm run otel:compose -- logs langfuse-web');
 }
 
+// ⚡ Bolt: Performance optimization (same as above)
 let readyCollector = '';
-for (const host of collectorHosts) {
-  if (await isReachable(host)) {
-    readyCollector = host;
-    break;
-  }
+try {
+  readyCollector = await Promise.any(collectorHosts.map(checkReachable));
+} catch (error) {
+  // All promises rejected
 }
 
 if (readyCollector) {
