@@ -46,12 +46,15 @@ async function isHealthy(host) {
 }
 
 async function resolveHealthyHost() {
-  for (const host of healthHosts) {
-    if (await isHealthy(host)) {
-      return host;
-    }
-  }
-  return '';
+  // ⚡ Bolt: Parallelize health checks with Promise.any to prevent sequential timeout delays
+  return Promise.any(
+    healthHosts.map(async (host) => {
+      if (await isHealthy(host)) {
+        return host;
+      }
+      throw new Error(`Unreachable: ${host}`);
+    })
+  ).catch(() => '');
 }
 
 async function captureScreenshot(host, env) {
