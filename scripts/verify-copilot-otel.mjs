@@ -45,11 +45,16 @@ console.log('[verify] Langfuse の起動を確認します（最大約5分）。
 
 let readyHost = '';
 for (let attempt = 0; attempt < maxAttempts && !readyHost; attempt += 1) {
-  for (const host of hosts) {
-    if (await isHealthy(host)) {
-      readyHost = host;
-      break;
-    }
+  // Optimize: use Promise.any to prevent sequential timeout delays (reduces time by up to 3s when host is unresolvable)
+  try {
+    readyHost = await Promise.any(
+      hosts.map(async host => {
+        if (await isHealthy(host)) return host;
+        throw new Error('Unhealthy');
+      })
+    );
+  } catch {
+    // Ignore errors, readyHost remains empty
   }
 
   if (!readyHost) {
@@ -66,11 +71,16 @@ if (readyHost) {
 }
 
 let readyCollector = '';
-for (const host of collectorHosts) {
-  if (await isReachable(host)) {
-    readyCollector = host;
-    break;
-  }
+// Optimize: use Promise.any to prevent sequential timeout delays
+try {
+  readyCollector = await Promise.any(
+    collectorHosts.map(async host => {
+      if (await isReachable(host)) return host;
+      throw new Error('Unreachable');
+    })
+  );
+} catch {
+  // Ignore errors, readyCollector remains empty
 }
 
 if (readyCollector) {
