@@ -45,13 +45,18 @@ async function isHealthy(host) {
   }
 }
 
+// Optimize: use Promise.any to prevent sequential timeout delays (reduces time by up to 3s when host is unresolvable)
 async function resolveHealthyHost() {
-  for (const host of healthHosts) {
-    if (await isHealthy(host)) {
-      return host;
-    }
+  try {
+    return await Promise.any(
+      healthHosts.map(async host => {
+        if (await isHealthy(host)) return host;
+        throw new Error('Unhealthy');
+      })
+    );
+  } catch {
+    return '';
   }
-  return '';
 }
 
 async function captureScreenshot(host, env) {
