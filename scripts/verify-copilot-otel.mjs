@@ -45,14 +45,17 @@ console.log('[verify] Langfuse の起動を確認します（最大約5分）。
 
 let readyHost = '';
 for (let attempt = 0; attempt < maxAttempts && !readyHost; attempt += 1) {
-  for (const host of hosts) {
-    if (await isHealthy(host)) {
-      readyHost = host;
-      break;
-    }
-  }
-
-  if (!readyHost) {
+  try {
+    // ⚡ Bolt Performance Optimization: Check health hosts in parallel.
+    // This prevents up to 3s sequential timeout delays per attempt when the first host
+    // (e.g., docker container hostname) is unresolvable from outside the network.
+    readyHost = await Promise.any(
+      hosts.map(async (host) => {
+        if (await isHealthy(host)) return host;
+        throw new Error('unhealthy');
+      })
+    );
+  } catch {
     await sleep(intervalMs);
   }
 }
@@ -66,11 +69,17 @@ if (readyHost) {
 }
 
 let readyCollector = '';
-for (const host of collectorHosts) {
-  if (await isReachable(host)) {
-    readyCollector = host;
-    break;
-  }
+try {
+  // ⚡ Bolt Performance Optimization: Check collector hosts in parallel.
+  // This prevents sequential timeout delays when checking unresolvable docker hostnames.
+  readyCollector = await Promise.any(
+    collectorHosts.map(async (host) => {
+      if (await isReachable(host)) return host;
+      throw new Error('unreachable');
+    })
+  );
+} catch {
+  // All failed, readyCollector remains empty
 }
 
 if (readyCollector) {
