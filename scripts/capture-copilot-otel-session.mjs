@@ -46,12 +46,17 @@ async function isHealthy(host) {
 }
 
 async function resolveHealthyHost() {
-  for (const host of healthHosts) {
-    if (await isHealthy(host)) {
-      return host;
-    }
+  // ⚡ Bolt: Check hosts in parallel to prevent sequential timeout delays caused by unresolvable hostnames outside the container network
+  try {
+    return await Promise.any(
+      healthHosts.map(async host => {
+        if (await isHealthy(host)) return host;
+        throw new Error('unhealthy');
+      })
+    );
+  } catch {
+    return '';
   }
-  return '';
 }
 
 async function captureScreenshot(host, env) {

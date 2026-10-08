@@ -1,0 +1,3 @@
+## 2024-10-07 - Use Promise.any for Parallel Health Checks
+**Learning:** In containerized environments, hostnames like `langfuse-web` or `otel-collector` might be unresolvable if a script runs outside the Docker network. Sequential `for...of` loops for health checks wait for each timeout sequentially, resulting in significant delays before falling back to `localhost`.
+**Action:** Always use `Promise.any` to check multiple endpoints (e.g., container host vs localhost) in parallel. This prevents cascading timeouts and immediately resolves to the first reachable endpoint, vastly improving startup validation speed.
