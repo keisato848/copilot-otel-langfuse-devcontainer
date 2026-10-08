@@ -1,0 +1,3 @@
+## 2023-10-08 - Parallelize Health Checks for Docker/Local Fallback URLs
+**Learning:** When a script iterates sequentially over fallback URLs that include Docker container hostnames (e.g., `http://langfuse-web:3000`, `http://localhost:3000`), running the script outside the container network causes DNS resolution delays (timeouts) for the container hostnames. This sequentially delays the connection to the valid localhost URL.
+**Action:** Use `Promise.any` to attempt connections to all potential URLs in parallel. `Promise.any` resolves with the first successful connection, entirely bypassing the sequential timeout delays caused by unreachable hostnames, significantly speeding up the script execution when fallbacks are needed.
