@@ -55,12 +55,21 @@ function openDashboard() {
 console.log('[otel-session] Langfuse 起動を確認します。');
 let readyHost = '';
 for (let attempt = 0; attempt < maxAttempts && !readyHost; attempt += 1) {
-  for (const host of healthHosts) {
-    if (await isHealthy(host)) {
-      readyHost = host;
-      break;
-    }
+  // Optimization: Check hosts in parallel to prevent sequential timeout delays
+  // Performance impact: Saves up to 3000ms per unresolvable hostname
+  try {
+    readyHost = await Promise.any(
+      healthHosts.map(async (host) => {
+        if (await isHealthy(host)) {
+          return host;
+        }
+        throw new Error(`Unhealthy: ${host}`);
+      })
+    );
+  } catch {
+    readyHost = '';
   }
+
   if (!readyHost) {
     await sleep(intervalMs);
   }

@@ -45,11 +45,19 @@ console.log('[verify] Langfuse の起動を確認します（最大約5分）。
 
 let readyHost = '';
 for (let attempt = 0; attempt < maxAttempts && !readyHost; attempt += 1) {
-  for (const host of hosts) {
-    if (await isHealthy(host)) {
-      readyHost = host;
-      break;
-    }
+  // Optimization: Check hosts in parallel to prevent sequential timeout delays
+  // Performance impact: Saves up to 3000ms per unresolvable hostname
+  try {
+    readyHost = await Promise.any(
+      hosts.map(async (host) => {
+        if (await isHealthy(host)) {
+          return host;
+        }
+        throw new Error(`Unhealthy: ${host}`);
+      })
+    );
+  } catch {
+    readyHost = '';
   }
 
   if (!readyHost) {
@@ -66,11 +74,19 @@ if (readyHost) {
 }
 
 let readyCollector = '';
-for (const host of collectorHosts) {
-  if (await isReachable(host)) {
-    readyCollector = host;
-    break;
-  }
+// Optimization: Check hosts in parallel to prevent sequential timeout delays
+// Performance impact: Saves up to 3000ms per unresolvable hostname
+try {
+  readyCollector = await Promise.any(
+    collectorHosts.map(async (host) => {
+      if (await isReachable(host)) {
+        return host;
+      }
+      throw new Error(`Unreachable: ${host}`);
+    })
+  );
+} catch {
+  readyCollector = '';
 }
 
 if (readyCollector) {
