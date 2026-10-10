@@ -45,13 +45,21 @@ async function isHealthy(host) {
   }
 }
 
+// Optimization: Check hosts in parallel to prevent sequential timeout delays
+// Performance impact: Saves up to 3000ms per unresolvable hostname
 async function resolveHealthyHost() {
-  for (const host of healthHosts) {
-    if (await isHealthy(host)) {
-      return host;
-    }
+  try {
+    return await Promise.any(
+      healthHosts.map(async (host) => {
+        if (await isHealthy(host)) {
+          return host;
+        }
+        throw new Error(`Unhealthy: ${host}`);
+      })
+    );
+  } catch {
+    return '';
   }
-  return '';
 }
 
 async function captureScreenshot(host, env) {
