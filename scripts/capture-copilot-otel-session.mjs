@@ -46,12 +46,18 @@ async function isHealthy(host) {
 }
 
 async function resolveHealthyHost() {
-  for (const host of healthHosts) {
-    if (await isHealthy(host)) {
-      return host;
-    }
+  // ⚡ Bolt: Optimize health checks by pinging URLs in parallel using Promise.any
+  // This prevents sequential timeout delays when running outside the container network.
+  try {
+    return await Promise.any(
+      healthHosts.map(async (host) => {
+        if (await isHealthy(host)) return host;
+        throw new Error();
+      })
+    );
+  } catch {
+    return '';
   }
-  return '';
 }
 
 async function captureScreenshot(host, env) {
