@@ -55,11 +55,16 @@ function openDashboard() {
 console.log('[otel-session] Langfuse 起動を確認します。');
 let readyHost = '';
 for (let attempt = 0; attempt < maxAttempts && !readyHost; attempt += 1) {
-  for (const host of healthHosts) {
-    if (await isHealthy(host)) {
-      readyHost = host;
-      break;
-    }
+  // ⚡ Bolt: Check healthHosts in parallel to avoid sequential timeout delays
+  try {
+    readyHost = await Promise.any(
+      healthHosts.map(async (host) => {
+        if (await isHealthy(host)) return host;
+        throw new Error('Not healthy');
+      })
+    );
+  } catch {
+    // All health checks failed for this attempt
   }
   if (!readyHost) {
     await sleep(intervalMs);
