@@ -4,8 +4,10 @@ const collectorHosts = ['http://otel-collector:4318', 'http://localhost:4318'];
 const maxAttempts = 60;
 const intervalMs = 5000;
 
-async function isHealthy(host) {
+async function isHealthy(host, parentSignal) {
   const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  if (parentSignal) parentSignal.addEventListener('abort', onAbort);
   const timeout = setTimeout(() => controller.abort(), 3000);
   try {
     const response = await fetch(`${host}/api/public/health`, { signal: controller.signal });
@@ -14,11 +16,14 @@ async function isHealthy(host) {
     return false;
   } finally {
     clearTimeout(timeout);
+    if (parentSignal) parentSignal.removeEventListener('abort', onAbort);
   }
 }
 
-async function isReachable(host) {
+async function isReachable(host, parentSignal) {
   const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  if (parentSignal) parentSignal.addEventListener('abort', onAbort);
   const timeout = setTimeout(() => controller.abort(), 3000);
   try {
     await fetch(host, { signal: controller.signal });
@@ -27,6 +32,7 @@ async function isReachable(host) {
     return false;
   } finally {
     clearTimeout(timeout);
+    if (parentSignal) parentSignal.removeEventListener('abort', onAbort);
   }
 }
 
@@ -45,11 +51,22 @@ console.log('[verify] Langfuse の起動を確認します（最大約5分）。
 
 let readyHost = '';
 for (let attempt = 0; attempt < maxAttempts && !readyHost; attempt += 1) {
-  for (const host of hosts) {
-    if (await isHealthy(host)) {
-      readyHost = host;
-      break;
-    }
+  // Optimization: Use Promise.any to check health endpoints in parallel,
+  // and pass an AbortController signal to cancel the slower/unreachable requests
+  // once the first one succeeds. This ensures the Node event loop is freed up immediately.
+  const batchController = new AbortController();
+  try {
+    readyHost = await Promise.any(
+      hosts.map(async (host) => {
+        if (await isHealthy(host, batchController.signal)) {
+          batchController.abort(); // Cancel other parallel requests
+          return host;
+        }
+        throw new Error('Not healthy');
+      })
+    );
+  } catch (err) {
+    // All hosts failed
   }
 
   if (!readyHost) {
@@ -66,11 +83,21 @@ if (readyHost) {
 }
 
 let readyCollector = '';
-for (const host of collectorHosts) {
-  if (await isReachable(host)) {
-    readyCollector = host;
-    break;
-  }
+// Optimization: Check reachability in parallel using Promise.any.
+// Passes an AbortController signal to abort remaining slow checks if one succeeds.
+const collectorBatchController = new AbortController();
+try {
+  readyCollector = await Promise.any(
+    collectorHosts.map(async (host) => {
+      if (await isReachable(host, collectorBatchController.signal)) {
+        collectorBatchController.abort(); // Cancel other parallel requests
+        return host;
+      }
+      throw new Error('Not reachable');
+    })
+  );
+} catch (err) {
+  // All hosts failed
 }
 
 if (readyCollector) {

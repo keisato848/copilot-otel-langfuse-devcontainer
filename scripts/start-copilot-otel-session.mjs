@@ -14,8 +14,10 @@ function sleep(ms) {
   return new Promise(resolveSleep => setTimeout(resolveSleep, ms));
 }
 
-async function isHealthy(host) {
+async function isHealthy(host, parentSignal) {
   const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  if (parentSignal) parentSignal.addEventListener('abort', onAbort);
   const timeout = setTimeout(() => controller.abort(), 3000);
   try {
     const response = await fetch(`${host}/api/public/health`, { signal: controller.signal });
@@ -24,6 +26,7 @@ async function isHealthy(host) {
     return false;
   } finally {
     clearTimeout(timeout);
+    if (parentSignal) parentSignal.removeEventListener('abort', onAbort);
   }
 }
 
@@ -55,12 +58,26 @@ function openDashboard() {
 console.log('[otel-session] Langfuse 起動を確認します。');
 let readyHost = '';
 for (let attempt = 0; attempt < maxAttempts && !readyHost; attempt += 1) {
-  for (const host of healthHosts) {
-    if (await isHealthy(host)) {
-      readyHost = host;
-      break;
-    }
+  // Optimization: Check health endpoints in parallel using Promise.any.
+  // This bypasses the 3s timeout for unresolvable docker hostnames
+  // when the script is run from outside the container network.
+  // The AbortController signal ensures the slower requests are aborted
+  // so the Node event loop isn't held open.
+  const batchController = new AbortController();
+  try {
+    readyHost = await Promise.any(
+      healthHosts.map(async (host) => {
+        if (await isHealthy(host, batchController.signal)) {
+          batchController.abort(); // Cancel other parallel requests
+          return host;
+        }
+        throw new Error('Not healthy');
+      })
+    );
+  } catch (err) {
+    // All hosts failed
   }
+
   if (!readyHost) {
     await sleep(intervalMs);
   }
