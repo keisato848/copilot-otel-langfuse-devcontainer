@@ -1,0 +1,3 @@
+## 2026-10-14 - [Docker Network Sequential Timeouts]
+**Learning:** Sequential `fetch` requests with `AbortController` timeouts to unresolvable Docker hostnames (e.g., `langfuse-web` from outside the container network) can severely delay startup checks. Even with a 3-second timeout per attempt, a loop with 60 max attempts could take minutes just waiting for DNS resolution failures on the unresolvable host before checking `localhost`.
+**Action:** When implementing fallback URLs or health checks that involve both container hostnames and `localhost`, always use `Promise.any()` to evaluate them in parallel. This completely bypasses the artificial delay caused by unreachable hostnames when the script is run locally.
